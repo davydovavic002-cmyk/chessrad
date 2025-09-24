@@ -1,25 +1,21 @@
-// server.js - САМАЯ НАДЕЖНАЯ ВЕРСИЯ
+// server.js - ФИНАЛЬНАЯ ВЕРСИЯ С ОТДЕЛЬНЫМ ПУТЕМ /ws
 
 const express = require('express');
 const http = require('http');
 const path = require('path');
 const { WebSocketServer } = require('ws');
+const { URL } = require('url'); // Добавляем модуль URL
 
-// 1. Настройка Express-сервера
 const app = express();
-// Раздаем статические файлы (index.html, script.js, и т.д.) из корневой папки
 app.use(express.static(path.join(__dirname, '/')));
 
-// 2. Создание HTTP-сервера на основе Express
 const server = http.createServer(app);
-
-// 3. Создаем WebSocket-сервер, но пока НЕ привязываем его к HTTP-серверу
 const wss = new WebSocketServer({ noServer: true });
 
-// 4. Логика обработки подключений (остается такой же)
 let players = {};
 
 wss.on('connection', (socket) => {
+    // ... (вся внутренняя логика wss.on('connection', ...) остается без изменений)
     let clientId = null;
     let playerColor = null;
 
@@ -59,18 +55,26 @@ wss.on('connection', (socket) => {
     });
 });
 
-// 5. САМОЕ ГЛАВНОЕ ИЗМЕНЕНИЕ: Слушаем событие 'upgrade' на HTTP-сервере
+// ГЛАВНОЕ ИЗМЕНЕНИЕ ЗДЕСЬ
 server.on('upgrade', (request, socket, head) => {
-  console.log('[Server] Received an upgrade request! Trying to handle WebSocket...');
+  // Парсим URL, чтобы получить путь
+  const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
 
-  // Передаем обработку "рукопожатия" нашему wss
-  wss.handleUpgrade(request, socket, head, (ws) => {
-    console.log('[Server] WebSocket handshake successful! Emitting connection.');
-    wss.emit('connection', ws, request);
-  });
+  console.log(`[Server] Upgrade request received for path: ${pathname}`);
+
+  // Проверяем, что запрос пришел именно на наш путь для WebSocket
+  if (pathname === '/ws') {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      console.log('[Server] WebSocket handshake successful for /ws!');
+      wss.emit('connection', ws, request);
+    });
+  } else {
+    // Если это какой-то другой путь, вежливо отказываем
+    console.log(`[Server] Rejecting upgrade request for unknown path: ${pathname}`);
+    socket.destroy();
+  }
 });
 
-// 6. Запуск HTTP-сервера
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`[Server] HTTP server is listening on port ${PORT}`);
