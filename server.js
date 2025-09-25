@@ -1,25 +1,21 @@
-// server.js (версия с отладкой пути)
+// server.js (Финальная версия)
 
 const http = require('http');
 const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
 
-// --- ИЗМЕНЕНИЕ №1: Явно указываем папку с файлами ---
-// Это более надежно, чем полагаться только на __dirname.
-const PUBLIC_DIR = path.resolve(__dirname);
+// Указываем, что наши файлы лежат на один уровень ВЫШЕ, чем запущенный скрипт
+const PUBLIC_DIR = path.resolve(__dirname, '..'); 
 
 const server = http.createServer((req, res) => {
     let requestedUrl = req.url;
-    // Если запрос на главную, отдаем index.html
     if (requestedUrl === '/') {
         requestedUrl = '/index.html';
     }
 
-    // Собираем полный, абсолютный путь к файлу
     let filePath = path.join(PUBLIC_DIR, requestedUrl);
 
-    // --- ИЗМЕНЕНИЕ №2: Добавляем лог для отладки ---
     console.log(`[Server] Request for URL: ${req.url}. Trying to serve file: ${filePath}`);
 
     const extname = path.extname(filePath);
@@ -36,7 +32,7 @@ const server = http.createServer((req, res) => {
     fs.readFile(filePath, (err, content) => {
         if (err) {
             if (err.code == 'ENOENT') {
-                console.error(`[Server] FILE NOT FOUND: ${filePath}`); // Дополнительный лог ошибки
+                console.error(`[Server] FILE NOT FOUND: ${filePath}`);
                 res.writeHead(404);
                 res.end('Error: File Not Found');
             } else {
@@ -45,7 +41,7 @@ const server = http.createServer((req, res) => {
                 res.end('Error: Server error: ' + err.code);
             }
         } else {
-            console.log(`[Server] Successfully served file: ${filePath}`); // Лог успеха
+            console.log(`[Server] Successfully served file: ${filePath}`);
             res.writeHead(200, { 'Content-Type': contentType });
             res.end(content, 'utf-8');
         }
