@@ -1,18 +1,27 @@
-// server.js
+// server.js (версия с отладкой пути)
 
-// Подключаем необходимые модули
 const http = require('http');
 const WebSocket = require('ws');
-const fs = require('fs'); // Модуль для работы с файловой системой
-const path = require('path'); // Модуль для работы с путями к файлам
+const fs = require('fs');
+const path = require('path');
 
-// Создаем HTTP сервер
+// --- ИЗМЕНЕНИЕ №1: Явно указываем папку с файлами ---
+// Это более надежно, чем полагаться только на __dirname.
+const PUBLIC_DIR = path.resolve(__dirname);
+
 const server = http.createServer((req, res) => {
-    // --- НОВЫЙ КОД ДЛЯ РАЗДАЧИ ФАЙЛОВ ---
-    // Определяем путь к запрашиваемому файлу
-    let filePath = path.join(__dirname, req.url === '/' ? 'index.html' : req.url);
+    let requestedUrl = req.url;
+    // Если запрос на главную, отдаем index.html
+    if (requestedUrl === '/') {
+        requestedUrl = '/index.html';
+    }
 
-    // Определяем тип контента на основе расширения файла
+    // Собираем полный, абсолютный путь к файлу
+    let filePath = path.join(PUBLIC_DIR, requestedUrl);
+
+    // --- ИЗМЕНЕНИЕ №2: Добавляем лог для отладки ---
+    console.log(`[Server] Request for URL: ${req.url}. Trying to serve file: ${filePath}`);
+
     const extname = path.extname(filePath);
     let contentType = 'text/html';
     switch (extname) {
@@ -24,42 +33,36 @@ const server = http.createServer((req, res) => {
             break;
     }
 
-    // Читаем файл и отправляем его клиенту
     fs.readFile(filePath, (err, content) => {
         if (err) {
-            // Если файл не найден, отправляем ошибку 404
             if (err.code == 'ENOENT') {
+                console.error(`[Server] FILE NOT FOUND: ${filePath}`); // Дополнительный лог ошибки
                 res.writeHead(404);
                 res.end('Error: File Not Found');
             } else {
-                // Другая серверная ошибка
+                console.error(`[Server] SERVER ERROR reading file: ${err.code}`);
                 res.writeHead(500);
                 res.end('Error: Server error: ' + err.code);
             }
         } else {
-            // Если все хорошо, отправляем файл
+            console.log(`[Server] Successfully served file: ${filePath}`); // Лог успеха
             res.writeHead(200, { 'Content-Type': contentType });
             res.end(content, 'utf-8');
         }
     });
-    // --- КОНЕЦ НОВОГО КОДА ---
 });
 
-// Создаем WebSocket сервер поверх HTTP сервера
+// ... остальной код для WebSocket остается без изменений ...
 const wss = new WebSocket.Server({ noServer: true });
-
-// Массив для хранения всех подключенных клиентов
 const clients = [];
 
 wss.on('connection', (ws) => {
     console.log('[Server] New client connected');
-    clients.push(ws); // Добавляем нового клиента в массив
+    clients.push(ws);
 
     ws.on('message', (message) => {
         const receivedMessage = message.toString('utf8');
         console.log(`[Server] Received message => ${receivedMessage}`);
-
-        // Рассылаем полученное сообщение всем остальным клиентам
         clients.forEach(client => {
             if (client !== ws && client.readyState === WebSocket.OPEN) {
                 client.send(receivedMessage);
@@ -69,7 +72,6 @@ wss.on('connection', (ws) => {
 
     ws.on('close', () => {
         console.log('[Server] Client disconnected');
-        // Удаляем клиента из массива при отключении
         const index = clients.indexOf(ws);
         if (index > -1) {
             clients.splice(index, 1);
@@ -81,11 +83,9 @@ wss.on('connection', (ws) => {
     });
 });
 
-// Обрабатываем запрос на "апгрейд" до WebSocket
 server.on('upgrade', (request, socket, head) => {
     const pathname = request.url;
     console.log(`[Server] Upgrade request received for path: ${pathname}`);
-
     if (pathname === '/ws') {
         wss.handleUpgrade(request, socket, head, (ws) => {
             console.log('[Server] WebSocket handshake successful for /ws!');
@@ -97,7 +97,6 @@ server.on('upgrade', (request, socket, head) => {
     }
 });
 
-// Запускаем сервер
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`[Server] HTTP server is listening on port ${PORT}`);
